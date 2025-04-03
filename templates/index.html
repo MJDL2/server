@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My File Storage</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1000px;
+            margin-top: 2rem;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #0d6efd;
+            background-color: #f8f9fa;
+        }
+        .file-tree {
+            margin-top: 2rem;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        .btn-action {
+            margin-left: 0.5rem;
+        }
+        .folder-content {
+            margin-left: 1.5rem;
+            display: none;
+        }
+        .folder-content.show {
+            display: block;
+        }
+        .folder-item {
+            cursor: pointer;
+        }
+        .folder-item:hover {
+            background-color: #f8f9fa;
+        }
+        .current-path {
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+        .progress {
+            display: none;
+            margin-top: 1rem;
+        }
+        .file-size {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        .search-box {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">My File Storage</h1>
+        
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="current-path" id="currentPath">현재 경로: /</div>
+                <div class="upload-area" id="dropZone">
+                    <h5>파일을 드래그하거나 클릭하여 업로드</h5>
+                    <p class="text-muted">최대 파일 크기: 10GB</p>
+                    <input type="file" id="fileInput" style="display: none">
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-success" onclick="showCreateFolderModal()">
+                        <i class="bi bi-folder-plus"></i> 새 폴더 만들기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">파일 및 폴더</h5>
+                <div class="search-box">
+                    <input type="text" class="form-control" id="searchInput" placeholder="파일 검색...">
+                </div>
+                <div class="file-tree" id="fileTree">
+                    {% for item in file_tree %}
+                    <div class="file-item">
+                        {% if item.type == 'folder' %}
+                        <div class="folder-item" onclick="toggleFolder(this)">
+                            <i class="bi bi-folder"></i> {{ item.name }}
+                            <i class="bi bi-chevron-right"></i>
+                        </div>
+                        <div class="folder-content">
+                            {% for child in item.children %}
+                            <div class="file-item">
+                                {% if child.type == 'folder' %}
+                                <div class="folder-item" onclick="toggleFolder(this)">
+                                    <i class="bi bi-folder"></i> {{ child.name }}
+                                    <i class="bi bi-chevron-right"></i>
+                                </div>
+                                <div class="folder-content">
+                                    <!-- Recursive folder content -->
+                                </div>
+                                {% else %}
+                                <span>
+                                    <i class="bi bi-file"></i> {{ child.name }}
+                                    <span class="file-size">{{ (child.size / 1024 / 1024)|round(2) }} MB</span>
+                                </span>
+                                <div>
+                                    <a href="{{ url_for('download_file', filepath=child.path) }}" class="btn btn-primary btn-sm btn-action">다운로드</a>
+                                    <button onclick="deleteItem('{{ child.path }}')" class="btn btn-danger btn-sm btn-action">삭제</button>
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span>
+                            <i class="bi bi-file"></i> {{ item.name }}
+                            <span class="file-size">{{ (item.size / 1024 / 1024)|round(2) }} MB</span>
+                        </span>
+                        <div>
+                            <a href="{{ url_for('download_file', filepath=item.path) }}" class="btn btn-primary btn-sm btn-action">다운로드</a>
+                            <button onclick="deleteItem('{{ item.path }}')" class="btn btn-danger btn-sm btn-action">삭제</button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Folder Modal -->
+    <div class="modal fade" id="createFolderModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">새 폴더 만들기</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" class="form-control" id="newFolderName" placeholder="폴더 이름">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                    <button type="button" class="btn btn-primary" onclick="createFolder()">만들기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentFolder = '';
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const createFolderModal = new bootstrap.Modal(document.getElementById('createFolderModal'));
+        const progressBar = document.querySelector('.progress');
+        const progressBarInner = document.querySelector('.progress-bar');
+        const searchInput = document.getElementById('searchInput');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#0d6efd';
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.style.borderColor = '#dee2e6';
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#dee2e6';
+            const files = e.dataTransfer.files;
+            if (files.length) uploadFile(files[0]);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) uploadFile(e.target.files[0]);
+        });
+
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const fileItems = document.querySelectorAll('.file-item');
+            
+            fileItems.forEach(item => {
+                const fileName = item.textContent.toLowerCase();
+                if (fileName.includes(searchTerm)) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+
+        function toggleFolder(element) {
+            const content = element.nextElementSibling;
+            const icon = element.querySelector('.bi-chevron-right');
+            content.classList.toggle('show');
+            icon.classList.toggle('bi-chevron-right');
+            icon.classList.toggle('bi-chevron-down');
+        }
+
+        function showCreateFolderModal() {
+            createFolderModal.show();
+        }
+
+        function createFolder() {
+            const folderName = document.getElementById('newFolderName').value;
+            if (!folderName) {
+                alert('폴더 이름을 입력해주세요');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('path', currentFolder);
+            formData.append('name', folderName);
+
+            fetch('/create_folder', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    alert('폴더 생성 실패');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('폴더 생성 중 오류가 발생했습니다');
+            });
+
+            createFolderModal.hide();
+            document.getElementById('newFolderName').value = '';
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function uploadFile(file) {
+            const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            let currentChunk = 0;
+
+            progressBar.style.display = 'block';
+            progressBarInner.style.width = '0%';
+            progressBarInner.textContent = '0%';
+
+            function uploadChunk() {
+                const start = currentChunk * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, file.size);
+                const chunk = file.slice(start, end);
+
+                const formData = new FormData();
+                formData.append('file', chunk);
+                formData.append('folder', currentFolder);
+                formData.append('chunk_index', currentChunk);
+                formData.append('total_chunks', totalChunks);
+
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.complete) {
+                        progressBarInner.style.width = '100%';
+                        progressBarInner.textContent = '100%';
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        currentChunk++;
+                        const progress = (currentChunk / totalChunks) * 100;
+                        progressBarInner.style.width = progress + '%';
+                        progressBarInner.textContent = Math.round(progress) + '%';
+                        uploadChunk();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('업로드 중 오류가 발생했습니다');
+                });
+            }
+
+            uploadChunk();
+        }
+
+        function deleteItem(path) {
+            if (confirm('이 항목을 삭제하시겠습니까?')) {
+                fetch(`/delete/${path}`)
+                .then(response => {
+                    if (response.ok) {
+                        location.reload();
+                    } else {
+                        alert('삭제 실패');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('삭제 중 오류가 발생했습니다');
+                });
+            }
+        }
+    </script>
+</body>
+</html>
